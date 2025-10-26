@@ -1,5 +1,5 @@
 #pydantic schemas for user creation and display
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 
 
@@ -38,4 +38,16 @@ class UserCreate(BaseModel):
     updated_at: datetime
 
 
-class User
+class User(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    phone_number: str | None = None
+    profile_picture_url: str | None = None
+    role: str
+    is_active: int
+    is_verified: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

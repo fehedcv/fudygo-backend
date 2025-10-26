@@ -34,6 +34,7 @@ class Restaurant(Base):
     menu_categories = relationship("MenuCategory", order_by="MenuCategory.id", back_populates="restaurant", cascade="all, delete-orphan")
     menu_items = relationship("MenuItem", order_by="MenuItem.id", back_populates="restaurant", cascade="all, delete-orphan")
     orders = relationship("Order", order_by="Order.id", back_populates="restaurant")
+    reviews = relationship("Review", order_by="Review.id", back_populates="restaurant")
 
 
 class MenuCategory(Base):
@@ -65,8 +66,23 @@ class MenuItem(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-    restaurant = relationship("Restaurant", back_populates="menu_items")
     category = relationship("MenuCategory", back_populates="menu_items")
+    restaurant = relationship("Restaurant", back_populates="menu_items")
+
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey('orders.id'), nullable=False, index=True)
+    menu_item_id = Column(Integer, ForeignKey('menu_items.id'), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    price_per_item = Column(Integer, nullable=False)
+    total_price = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    order = relationship("Order", back_populates="order_items")
+    menu_item = relationship("MenuItem")
 
 
 class Order(Base):
@@ -97,6 +113,8 @@ class Order(Base):
     restaurant = relationship("Restaurant", back_populates="orders")
     delivery_address = relationship("Address", back_populates="orders")
     order_items = relationship("OrderItem", order_by="OrderItem.id", back_populates="order", cascade="all, delete-orphan")
+    status_history = relationship("OrderStatusHistory", order_by="OrderStatusHistory.id", back_populates="order", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="order")
 
 
 class OrderStatusHistory(Base):
@@ -125,4 +143,4 @@ class Review(Base):
 
     user = relationship("Profile", back_populates="reviews")
     restaurant = relationship("Restaurant", back_populates="reviews")
-    order = relationship("Order", back_populates="reviews")
+    order = relationship("Order", back_populates="reviews", uselist=False)
