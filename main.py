@@ -1,9 +1,17 @@
 import uvicorn
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Import firebase core module to initialize firebase admin sdk
+from app.core import firebase
 
 #create the table
 import logging
 from sqlalchemy.exc import OperationalError
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Import models here to register them with the Base metadata
 from app.models import user, restaurant
@@ -16,6 +24,8 @@ from app.db.session import engine
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+security = HTTPBearer()
 
 app = FastAPI(
     title="Elamfood API",

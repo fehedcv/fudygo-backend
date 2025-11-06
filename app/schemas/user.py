@@ -1,20 +1,22 @@
 #pydantic schemas for user creation and display
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, computed_field
 from datetime import datetime
 
 
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
     full_name: str
     phone_number: str
-    profile_picture_url: str 
-    role: str = "customer"
-    created_at: datetime
-    updated_at: datetime
+    profile_picture_url: str | None = None
 
+
+
+
+
+class Role(BaseModel):
+    name: str
+    model_config = ConfigDict(from_attributes=True)
 
 class User(BaseModel):
     id: int
@@ -22,11 +24,21 @@ class User(BaseModel):
     full_name: str
     phone_number: str | None = None
     profile_picture_url: str | None = None
-    role: str
     is_active: int
     is_verified: int
     created_at: datetime
     updated_at: datetime
+    roles: list[Role] = []
+
+    @computed_field
+    @property
+    def role(self) -> str:
+        # Assuming roles is a list of Role objects and we take the first one
+        if self.roles:
+            return self.roles[0].name
+        return "N/A"
+
+    model_config = ConfigDict(from_attributes=True)
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -2,3 +2,7 @@
 /.env
 __pycache__/
 *.pyc
+/fudygo-firebase.json
+/test.html
+/.vscode
+/get_id_token.py
