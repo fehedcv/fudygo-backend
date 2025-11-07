@@ -1,6 +1,7 @@
 #restaurant db model in sqlalchemy
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 import datetime
 from app.db.base import Base
@@ -70,7 +71,7 @@ class MenuItem(Base):
     restaurant = relationship("Restaurant", back_populates="menu_items")
 
 
-class OrderItem(Base):
+'''class OrderItem(Base):
     __tablename__ = 'order_items'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -82,7 +83,7 @@ class OrderItem(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     order = relationship("Order", back_populates="order_items")
-    menu_item = relationship("MenuItem")
+    menu_item = relationship("MenuItem")'''
 
 
 class Order(Base):
@@ -96,7 +97,7 @@ class Order(Base):
     status = Column(String(50), nullable=False, default='pending', index=True)  # e.g., pending, confirmed, delivered
     delivery_address_id = Column(Integer, ForeignKey('addresses.id'), nullable=True)
     scheduled_time = Column(DateTime, nullable=True)
-    items = Column(String(2000), nullable=False)  # JSON string of ordered items
+    items = Column(JSONB, nullable=False)  # JSON string of ordered items
     subtotal_amount = Column(Integer, nullable=False)
     discount_amount = Column(Integer, default=0)
     delivery_fee = Column(Integer, default=0)
@@ -112,7 +113,7 @@ class Order(Base):
     user = relationship("Profile", back_populates="orders")
     restaurant = relationship("Restaurant", back_populates="orders")
     delivery_address = relationship("Address", back_populates="orders")
-    order_items = relationship("OrderItem", order_by="OrderItem.id", back_populates="order", cascade="all, delete-orphan")
+    #order_items = relationship("OrderItem", order_by="OrderItem.id", back_populates="order", cascade="all, delete-orphan")
     status_history = relationship("OrderStatusHistory", order_by="OrderStatusHistory.id", back_populates="order", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="order")
 

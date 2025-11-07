@@ -16,7 +16,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # Import models here to register them with the Base metadata
 from app.models import user, restaurant
 
-from app.api.v1 import user as user_api
+from app.api.v1 import user as user_api, restaurant as restaurant_api
+from app.api.v1.admin import adminOps as admin_restaurant_api
 from app.db.base import Base
 from app.db.session import engine
 
@@ -37,7 +38,10 @@ app = FastAPI(
 def on_startup():
     create_tables(engine)
 
-app.include_router(user_api.router, prefix="/api/v1", tags=["Users"])
+app.include_router(user_api.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(restaurant_api.router, prefix="/api/v1/restaurants", tags=["Restaurants"])
+app.include_router(admin_restaurant_api.router, prefix="/api/v1/adm", tags=["Admin Restaurants"])
+
 
 def create_tables(engine):
     try:

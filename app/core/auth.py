@@ -2,7 +2,11 @@
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth
-import firebase_admin
+from sqlalchemy.orm import Session
+from app.db.session import get_db
+from app.models.user import Profile as ProfileModel
+
+
 
 security = HTTPBearer()
 
@@ -21,3 +25,13 @@ def get_current_user(decoded_token: dict = Depends(verify_firebase_token)):
     if not user_id or not email:
         raise HTTPException(status_code=401, detail="Invalid token payload")
     return {"user_id": user_id, "email": email}
+
+#check if user is admin by checking user_roles in the database
+def is_admin_user(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(ProfileModel).filter(ProfileModel.firebase_uid == current_user["user_id"]).first()
+    if not db_user or 'admin' not in db_user.roles:
+        raise HTTPException(status_code=403, detail="Not authorized as admin")
+    return True
