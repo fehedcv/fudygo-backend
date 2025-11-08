@@ -50,10 +50,9 @@ def search_restaurants(
 
     query = query.order_by(sort_column)
 
-    total = query.count()
+
     restaurants = query.offset((page - 1) * size).limit(size).all()
 
-    return restaurants, total
-
+    return restaurants
 
 

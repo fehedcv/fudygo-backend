@@ -7,6 +7,7 @@ from app.schemas.user import User as UserSchema
 from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema
 from app.core.auth import get_current_user, is_admin_user
 import uuid
+from app.api.v1.admin.crud import add_role
 
 router = APIRouter()
 
@@ -40,6 +41,9 @@ def create_restaurant_for_user(
         average_delivery_time=restaurant.average_delivery_time,
         owner_id=restaurant.owner_id
     )
+
+    #add manager role to the user if not already
+    add_role(db, restaurant.owner_id, "manager")
     db.add(db_restaurant)
     db.commit()
     db.refresh(db_restaurant)
