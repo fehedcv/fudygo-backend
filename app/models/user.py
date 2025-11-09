@@ -54,14 +54,16 @@ class Address(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     profile_id = Column(Integer, ForeignKey('profiles.id'), nullable=False, index=True)
-    label = Column(String(50), nullable=False)  # e.g., Home, Work
-    address_line1 = Column(String(255), nullable=False)
-    address_line2 = Column(String(255), nullable=True)
-    city = Column(String(100), nullable=False)
-    state = Column(String(100), nullable=False)
-    post_code = Column(String(20), nullable=False, index=True)
+    label = Column(String(50), default="home")  # e.g., Home, Work
+    address = Column(String(255), nullable=False)
     latitude = Column(String(50), nullable=True, index=True)
     longitude = Column(String(50), nullable=True, index=True)
+    place_id = Column(String(255), nullable=True, index=True)
+    formatted_address = Column(String(255), nullable=True)
+    city = Column(String(100), nullable=False)
+    state = Column(String(100), nullable=False)
+    country = Column(String(100), nullable=False)
+    postal_code = Column(String(20), nullable=False, index=True)
     is_default = Column(Integer, default=0)  # 1 for default address, 0 otherwise
     created_at = Column(DateTime, default=datetime.utcnow)
     

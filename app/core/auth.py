@@ -5,6 +5,8 @@ from firebase_admin import auth
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import Profile as ProfileModel
+from sqlalchemy import update, func
+from app.models.user import Profile as User
 
 
 
@@ -26,12 +28,50 @@ def get_current_user(decoded_token: dict = Depends(verify_firebase_token)):
         raise HTTPException(status_code=401, detail="Invalid token payload")
     return {"user_id": user_id, "email": email}
 
-#check if user is admin by checking user_roles in the database
-def is_admin_user(
+
+def check_role(
+    role: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    db_user = db.query(ProfileModel).filter(ProfileModel.firebase_uid == current_user["user_id"]).first()
-    if not db_user or 'admin' not in db_user.roles:
-        raise HTTPException(status_code=403, detail="Not authorized as admin")
+    user_id = current_user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid user")
+
+    db_user = db.query(ProfileModel).filter(ProfileModel.firebase_uid == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not db_user.roles or role not in db_user.roles:
+        raise HTTPException(status_code=403, detail=f"Not authorized as {role}")
+
     return True
+
+
+#function to check if any of the role is in user
+def check_any_role(
+    roles: list[str],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user_id = current_user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid user")
+
+    db_user = db.query(ProfileModel).filter(ProfileModel.firebase_uid == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not db_user.roles or not any(role in db_user.roles for role in roles):
+        raise HTTPException(status_code=403, detail=f"Not authorized with required roles")
+
+    return True
+
+def add_role(db, user_id: int, role: str):
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .values(roles=func.array_append(func.coalesce(User.roles, '{}'), role))
+    )
+    db.execute(stmt)
+    db.commit()

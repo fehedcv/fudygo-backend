@@ -1,47 +1,32 @@
 import uvicorn
 from dotenv import load_dotenv
-
-# Load environment variables from .env file
 load_dotenv()
-
-# Import firebase core module to initialize firebase admin sdk
+import os
 from app.core import firebase
+# Load environment variables from .env file
 
-#create the table
+# Check for Firebase service account JSON
+'''if not os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
+    raise ValueError("FIREBASE_SERVICE_ACCOUNT_JSON environment variable not set. Please create a .env file and add the required environment variables.")
+'''
+
+
 import logging
 from sqlalchemy.exc import OperationalError
-from fastapi import FastAPI, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-# Import models here to register them with the Base metadata
-from app.models import user, restaurant
-
-from app.api.v1 import user as user_api, restaurant as restaurant_api
-from app.api.v1.admin import adminOps as admin_restaurant_api
 from app.db.base import Base
 from app.db.session import engine
+from app.api.v2 import router
+from fastapi.security import HTTPBearer
 
-
+app = router.app
+security = HTTPBearer()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-security = HTTPBearer()
-
-app = FastAPI(
-    title="Elamfood API",
-    description="API for a food delivery service.",
-    version="1.0.0"
-)
-
 @app.on_event("startup")
 def on_startup():
     create_tables(engine)
-
-app.include_router(user_api.router, prefix="/api/v1/users", tags=["Users"])
-app.include_router(restaurant_api.router, prefix="/api/v1/restaurants", tags=["Restaurants"])
-app.include_router(admin_restaurant_api.router, prefix="/api/v1/adm", tags=["Admin Restaurants"])
-
 
 def create_tables(engine):
     try:

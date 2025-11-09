@@ -52,11 +52,15 @@ class UserUpdate(BaseModel):
 
 class AddressCreate(BaseModel):
     label: str
-    address_line1: str
-    address_line2: str | None = None
+    address: str
+    latitude: str | None = None
+    longitude: str | None = None
+    place_id: str | None = None
+    formatted_address: str | None = None
     city: str
     state: str
-    post_code: str
+    country: str
+    postal_code: str
     is_default: int = 0
 
     model_config = ConfigDict(from_attributes=True)
@@ -66,14 +70,32 @@ class AddressModel(BaseModel):
     id: int
     profile_id: int
     label: str
-    address_line1: str
-    address_line2: str | None = None
+    address: str
+    place_id: str | None = None
+    formatted_address: str | None = None
+    country: str
     city: str
     state: str
-    post_code: str
+    postal_code: str
     latitude: str | None = None
     longitude: str | None = None
     is_default: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AddressUpdate(BaseModel):
+    label: str | None = None
+    address: str | None = None
+    latitude: str | None = None
+    longitude: str | None = None
+    place_id: str | None = None
+    formatted_address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
+    postal_code: str | None = None
+    is_default: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
