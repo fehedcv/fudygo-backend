@@ -7,7 +7,7 @@ from app.core.auth import get_current_user
 
 router = APIRouter()
 
-@router.get("/addresses/me", response_model=list[AddressModel])
+@router.get("/me", response_model=list[AddressModel])
 def get_my_addresses(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -21,7 +21,7 @@ def get_my_addresses(
     return db_user.addresses
 
 
-@router.post("/addresses/me", response_model=AddressModel)
+@router.post("/me", response_model=AddressModel)
 def add_my_address(
     address: AddressCreate,
     db: Session = Depends(get_db),
@@ -42,7 +42,7 @@ def add_my_address(
     return new_address
 
 
-@router.patch("/addresses/me/{address_id}", response_model=AddressModel)
+@router.patch("/me/{address_id}", response_model=AddressModel)
 def update_my_address(
     address_id: int,
     address: AddressUpdate,
@@ -74,7 +74,7 @@ def update_my_address(
 
 
 #put address for user
-@router.put("/addresses/me/{address_id}", response_model=AddressModel)
+@router.put("/me/{address_id}", response_model=AddressModel)
 def replace_my_address(
     address_id: int,
     address: AddressCreate,
@@ -105,7 +105,7 @@ def replace_my_address(
 
 
 #delete address for user
-@router.delete("/addresses/me/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/me/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_my_address(
     address_id: int,
     db: Session = Depends(get_db),

@@ -1,123 +1,159 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.restaurant import Cart, CartItem
-from app.schemas.cart import CartItemBase, CartItemResponse, CartResponse, CartItemUpdate
+from app.models.restaurant import Cart, CartItem, MenuItem, Restaurant
 from app.core.auth import get_current_user
+from app.schemas.cart import (
+    CartResponse, CartItemCreate, CartItemUpdate, CartItemResponse
+)
 
 router = APIRouter()
+
+
+
+# ─────────────────────────────────────────────
+# Helper — get or create cart
+# ─────────────────────────────────────────────
+def get_or_create_cart(db, user_id):
+    cart = db.query(Cart).filter(Cart.user_id == user_id).first()
+    if not cart:
+        cart = Cart(
+            user_id=user_id,
+            total_amount=0,
+            total_items=0
+        )
+        db.add(cart)
+        db.commit()
+        db.refresh(cart)
+    return cart
+
+
+def recalc_cart(cart):
+    cart.total_items = sum(item.quantity for item in cart.items)
+    cart.total_amount = sum(item.total_price for item in cart.items)
+
 
 @router.get("/me", response_model=CartResponse)
 def get_cart(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    cart = db.query(Cart).filter(Cart.user_id == current_user["user_id"]).first()
-    if not cart:
-        cart = Cart(user_id=current_user["user_id"])
-        db.add(cart)
-        db.commit()
-        db.refresh(cart)
+    cart = get_or_create_cart(db, current_user["db_user"].id)
     return cart
 
 
-@router.post("/items", response_model=CartResponse)
-def add_item_to_cart(
-    item: CartItemBase,
+@router.post("/items", response_model=CartItemResponse)
+def add_item(
+    item: CartItemCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    cart = db.query(Cart).filter(Cart.user_id == current_user["user_id"]).first()
-    if not cart:
-        cart = Cart(user_id=current_user["user_id"])
-        db.add(cart)
-        db.commit()
-        db.refresh(cart)
+    user_id = current_user["db_user"].id
+    cart = get_or_create_cart(db, user_id)
 
-    existing_item = db.query(CartItem).filter(
+    menu_item = db.query(MenuItem).filter(MenuItem.id == item.menu_item_id).first()
+    if not menu_item:
+        raise HTTPException(404, "Menu item not found")
+
+    # Check if item already exists in the cart
+    existing = db.query(CartItem).filter(
         CartItem.cart_id == cart.id,
         CartItem.menu_item_id == item.menu_item_id,
         CartItem.restaurant_id == item.restaurant_id
     ).first()
 
-    if existing_item:
-        existing_item.quantity += item.quantity
-        existing_item.price_per_item = item.price_per_item
-        existing_item.total_price = item.total_price
-        existing_item.notes = item.notes
-    else:
-        new_item = CartItem(**item.model_dump(), cart_id=cart.id)
-        db.add(new_item)
+    if existing:
+        # Increase quantity
+        existing.quantity += item.quantity
+        existing.total_price = existing.quantity * existing.price_per_item
+        recalc_cart(cart)
+        db.commit()
+        db.refresh(existing)
+        return existing
 
-    #recalculate totals
-    cart.total_price = sum(item.total_price for item in cart.items)
-    cart.total_items = sum(item.quantity for item in cart.items)
+    # Create new cart item
+    cart_item = CartItem(
+        cart_id=cart.id,
+        menu_item_id=item.menu_item_id,
+        restaurant_id=item.restaurant_id,
+        quantity=item.quantity,
+        price_per_item=menu_item.price,
+        total_price=menu_item.price * item.quantity,
+        notes=item.notes
+    )
 
+    db.add(cart_item)
+    recalc_cart(cart)
     db.commit()
-    db.refresh(cart)
-    return cart 
+    db.refresh(cart_item)
 
-@router.patch("/items/{item_id}", response_model=CartResponse)
-def update_item_in_cart(
+    return cart_item
+
+
+@router.patch("/items/{item_id}", response_model=CartItemResponse)
+def update_item(
     item_id: int,
-    item_update: CartItemUpdate,
+    body: CartItemUpdate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    cart = db.query(Cart).filter(Cart.user_id == current_user["user_id"]).first()
-    if not cart:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    cart_item = db.query(CartItem).filter(CartItem.id == item_id, CartItem.cart_id == cart.id).first()
+    cart_item = db.query(CartItem).join(Cart).filter(
+        Cart.user_id == current_user["db_user"].id,
+        CartItem.id == item_id
+    ).first()
+
     if not cart_item:
-        raise HTTPException(status_code=404, detail="Cart item not found")
-    
-    cart_item.quantity = item_update.quantity
-    cart_item.notes = item_update.notes
-    
-    cart.total_items = sum(item.quantity for item in cart.items)
-    cart.total_amount = sum(item.total_price for item in cart.items)
-    
-    db.commit()
-    db.refresh(cart)
-    return cart
+        raise HTTPException(404, "Item not found in your cart")
 
-@router.delete("/items/{item_id}", response_model=CartResponse)
-def remove_item_from_cart(
+    if body.quantity <= 0:
+        raise HTTPException(400, "Quantity must be at least 1")
+
+    cart_item.quantity = body.quantity
+    cart_item.total_price = cart_item.quantity * cart_item.price_per_item
+
+    recalc_cart(cart_item.cart)
+    db.commit()
+    db.refresh(cart_item)
+
+    return cart_item
+
+
+@router.delete("/items/{item_id}", status_code=204)
+def remove_item(
     item_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    cart = db.query(Cart).filter(Cart.user_id == current_user["user_id"]).first()
-    if not cart:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    item = db.query(CartItem).filter(CartItem.id == item_id, CartItem.cart_id == cart.id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Cart item not found")
-    
-    db.delete(item)
+    cart_item = db.query(CartItem).join(Cart).filter(
+        Cart.user_id == current_user["db_user"].id,
+        CartItem.id == item_id
+    ).first()
+
+    if not cart_item:
+        raise HTTPException(404, "Item not found")
+
+    cart = cart_item.cart
+    db.delete(cart_item)
+    recalc_cart(cart)
+
     db.commit()
-
-    cart.total_amount = sum(item.total_price for item in cart.items)
-    cart.total_items = sum(item.quantity for item in cart.items)
-    
-    return cart
+    return None
 
 
-@router.delete(
-    "/me",
-    status_code=status.HTTP_204_NO_CONTENT,
-    response_model=None
-)
+@router.delete("", status_code=204)
 def clear_cart(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    cart = db.query(Cart).filter(Cart.user_id == current_user["user_id"]).first()
-    
+    cart = db.query(Cart).filter(Cart.user_id == current_user["db_user"].id).first()
+
     if not cart:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    db.delete(cart)
+        raise HTTPException(404, "Cart not found")
+
+    db.query(CartItem).filter(CartItem.cart_id == cart.id).delete()
+
+    cart.total_amount = 0
+    cart.total_items = 0
+
     db.commit()
+    return None
