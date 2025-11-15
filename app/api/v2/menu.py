@@ -1,130 +1,160 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from app.db.session import get_db
-from app.models.restaurant import Restaurant as RestaurantModel
-from app.schemas.restaurant import Restaurant
-from app.core.auth import get_current_user,check_role
-from app.schemas.menu import MenuCategory, MenuCategoryCreate, MenuItem, MenuItemCreate,MenuItemUpdate
+from app.models.restaurant import MenuItem, MenuCategory
+from app.schemas.menu import (
+    MenuItemCreate,
+    MenuItemUpdate,
+    MenuItemResponse,
+    MenuCategoryResponse,
+)
+from app.core.auth import (
+    get_current_user,
+    check_any_role,
+)
 
 router = APIRouter()
 
 
-#get menu for restaurant
-@router.get("/restaurants/{restaurant_id}/menu/", response_model=list[MenuItem], description="Get menu items for a specific restaurant")
+
+# Dependency wrapper for manager/admin role
+def ManagerOrAdmin():
+    return check_any_role(["manager", "admin"])
+
+
+# ===========================================================================
+# PUBLIC ENDPOINTS
+# ===========================================================================
+
+@router.get(
+    "/restaurants/{restaurant_id}",
+    response_model=list[MenuItemResponse],
+    summary="Get menu for a restaurant",
+)
 def get_menu_for_restaurant(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
 ):
-    restaurant = db.query(RestaurantModel).filter(RestaurantModel.id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-    
-    menu_items = db.query(MenuItem).filter(MenuItem.restaurant_id == restaurant_id).all()
-    return menu_items
+    items = db.query(MenuItem).filter(MenuItem.restaurant_id == restaurant_id).all()
+    return items
 
 
-@router.post("/menu-items/", response_model=MenuItem, description="Create a new menu item (manager or admin only)")
-def create_menu_item(
-    item: MenuItemCreate,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    if not check_role("manager", current_user, db) or check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized as manager")
-    
-    db_item = MenuItem(**item.dict())
-    db.add(db_item)
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-
-#get menu item details
-@router.get("/menu-items/{item_id}/", response_model=MenuItem, description="Get details of a specific menu item")
+@router.get(
+    "/{item_id}",
+    response_model=MenuItemResponse,
+    summary="Get menu item details",
+)
 def get_menu_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
 ):
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
-    return db_item
+    item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Menu item not found")
+    return item
 
 
-#put menu item (manager or admin only)
-@router.put("/menu-items/{item_id}/", response_model=MenuItem, description="Update a menu item (manager or admin only)")
+@router.get(
+    "/categories",
+    response_model=list[MenuCategoryResponse],
+    summary="Get global menu categories",
+)
+def get_global_categories(
+    db: Session = Depends(get_db),
+):
+    return db.query(MenuCategory).all()
+
+
+# ===========================================================================
+# PROTECTED ENDPOINTS (manager or admin)
+# ===========================================================================
+
+@router.post(
+    "/restaurants/{restaurant_id}",
+    response_model=MenuItemResponse,
+    status_code=201,
+    summary="Add new menu item",
+)
+def add_menu_item(
+    restaurant_id: int,
+    item: MenuItemCreate,
+    db: Session = Depends(get_db),
+    _ = Depends(ManagerOrAdmin),  # auth applied here
+):
+    if item.restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=400,
+            detail="restaurant_id mismatch between URL and body",
+        )
+
+    new_item = MenuItem(**item.dict())
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
+
+
+@router.put(
+    "/{item_id}",
+    response_model=MenuItemResponse,
+    summary="Update full menu item",
+)
 def update_menu_item(
     item_id: int,
-    item_update: MenuItemUpdate,
+    payload: MenuItemCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(ManagerOrAdmin),
 ):
-    if not check_role("manager", current_user, db) or check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized as manager")
-    
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
-    
-    for key, value in item_update.dict(exclude_unset=True).items():
-        setattr(db_item, key, value)
-    
+    item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Menu item not found")
+
+    for key, value in payload.dict().items():
+        setattr(item, key, value)
+
     db.commit()
-    db.refresh(db_item)
-    return db_item
+    db.refresh(item)
+    return item
 
 
-#patch menu item (manager or admin only)
-@router.patch("/menu-items/{item_id}/", response_model=MenuItem, description="Partially update a menu item (manager or admin only)")
+@router.patch(
+    "/{item_id}",
+    response_model=MenuItemResponse,
+    summary="Partially update menu item",
+)
 def patch_menu_item(
     item_id: int,
-    item_update: MenuItemUpdate,
+    payload: MenuItemUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(ManagerOrAdmin),
 ):
-    if not check_role("manager", current_user, db) or check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized as manager")
-    
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
-    
-    for key, value in item_update.dict(exclude_unset=True).items():
-        setattr(db_item, key, value)
-    
+    item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Menu item not found")
+
+    for key, value in payload.dict(exclude_unset=True).items():
+        setattr(item, key, value)
+
     db.commit()
-    db.refresh(db_item)
-    return db_item
+    db.refresh(item)
+    return item
 
 
-#delete menu item (manager or admin only)
-@router.delete("/menu-items/{item_id}/", status_code=status.HTTP_204_NO_CONTENT, description="Delete a menu item (manager or admin only)")
+@router.delete(
+    "/{item_id}",
+    status_code=204,
+    summary="Delete menu item",
+)
 def delete_menu_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(ManagerOrAdmin),
 ):
-    if not check_role("manager", current_user, db) or check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized as manager")
-    
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
-    
-    db.delete(db_item)
+    item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Menu item not found")
+
+    db.delete(item)
     db.commit()
-    return "deleted successfully"
-
-
-#get global categories
-@router.get("/categories/", response_model=list[MenuCategory], description="Get all menu categories")
-def get_menu_categories(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    categories = db.query(MenuCategory).all()
-    return categories
-
-
+    return

@@ -48,6 +48,13 @@ class Profile(Base):
         back_populates="user"
     )
 
+    cart = relationship(
+        "Cart",
+        back_populates="user",
+        uselist=False)
+
+
+
 
 class Address(Base):
     __tablename__ = 'addresses'

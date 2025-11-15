@@ -127,7 +127,7 @@ def delete_my_address(
 
     db.delete(db_address)
     db.commit()
-    return {"message": "Address deleted successfully"}
+    return None
 
 #set default address for user patch
 '''@router.patch("/addresses/me/{address_id}/default", response_model=AddressModel)

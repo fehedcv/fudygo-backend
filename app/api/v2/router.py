@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.api.v2 import (
-    address,menu,restaurant,users,userAuth
+    address,menu,restaurant,users,userAuth,cart,order
 )
 
 app = FastAPI(
@@ -14,3 +14,6 @@ app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(restaurant.router, prefix="/restaurants", tags=["Restaurants"])
 app.include_router(address.router, prefix="/addresses", tags=["Addresses"])
 app.include_router(menu.router, prefix="/menu", tags=["Menu"])
+app.include_router(cart.router, prefix="/cart", tags=["Cart"])
+app.include_router(order.router, prefix="/orders", tags=["Orders"])
+

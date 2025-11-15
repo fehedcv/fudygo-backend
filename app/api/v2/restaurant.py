@@ -1,15 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import func, asc, desc
 import uuid
-from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema 
+from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema , RestaurantUpdate
 from typing import List, Optional
 from app.db.session import get_db
 from app.models.restaurant import Restaurant as RestaurantModel
+from app.models.user import Profile as ProfileModel
 from app.core.auth import get_current_user, check_role, add_role, check_any_role
-from app.schemas.menu import MenuCategory, MenuCategoryCreate
 from app.models.user import Profile
-from app.models.restaurant import MenuCategory as MenuCategoryModel
+from app.models.restaurant import MenuCategory 
+from app.schemas.menu import MenuCategoryResponse, MenuCategoryCreate
 
 router = APIRouter()
 
@@ -95,18 +97,41 @@ def get_restaurant(restaurant_id: int, db: Session = Depends(get_db), current_us
     return restaurant
 
 
-@router.post("/restaurants/", response_model=RestaurantSchema, status_code=status.HTTP_201_CREATED, description="Create a restaurant for another user (admin only)")
+@router.post(
+    "/",
+    response_model=RestaurantSchema,
+    status_code=status.HTTP_201_CREATED,
+    description="Create a restaurant for another user (admin only)"
+)
 def create_restaurant_for_user(
     restaurant: RestaurantCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(check_role("admin"))
 ):
-    if not check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized to create restaurant for another user")
-    
-    # Generate a unique slug for the restaurant
-    slug = restaurant.name.lower().replace(" ", "-") + "-" + str(uuid.uuid4())[:8]
-    
+    # -------------------------
+    # 2. Validate owner existence
+    # -------------------------
+    owner = db.query(ProfileModel).filter(ProfileModel.id == restaurant.owner_id).first()
+    if not owner:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Owner with id {restaurant.owner_id} does not exist"
+        )
+
+    # -------------------------
+    # 3. Generate unique slug
+    # -------------------------
+    try:
+        slug = restaurant.name.lower().replace(" ", "-") + "-" + str(uuid.uuid4())[:8]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating slug: {str(e)}"
+        )
+
+    # -------------------------
+    # 4. Create Restaurant Object
+    # -------------------------
     db_restaurant = RestaurantModel(
         slug=slug,
         name=restaurant.name,
@@ -122,27 +147,70 @@ def create_restaurant_for_user(
         operating_hours=restaurant.operating_hours,
         minimum_order_amount=restaurant.minimum_order_amount,
         average_delivery_time=restaurant.average_delivery_time,
-        owner_id=restaurant.owner_id
+        owner_id=restaurant.owner_id,
     )
 
-    #add manager role to the user if not already
-    add_role(db, restaurant.owner_id, "manager")
-    db.add(db_restaurant)
-    db.commit()
-    db.refresh(db_restaurant)
-    return db_restaurant
+    # -------------------------
+    # 5. Add manager role safely
+    # -------------------------
+    try:
+        add_role(db, restaurant.owner_id, "manager")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error adding manager role: {str(e)}"
+        )
 
+    # -------------------------
+    # 6. Save Restaurant with full DB error handling
+    # -------------------------
+    try:
+        db.add(db_restaurant)
+        db.commit()
+        db.refresh(db_restaurant)
+        return db_restaurant
 
-@router.put("/restaurants/{restaurant_id}/", response_model=RestaurantSchema, description="Update restaurant info (admin only)")
+    except IntegrityError as e:
+        db.rollback()
+
+        # Unique constraint errors
+        if 'slug' in str(e.orig):
+            raise HTTPException(
+                status_code=400,
+                detail="A restaurant with a similar slug already exists. Try again."
+            )
+        if 'owner_id' in str(e.orig):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid owner_id or owner already holds a conflicting record."
+            )
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Database integrity error: {str(e.orig)}"
+        )
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected server error: {str(e)}"
+        )
+
+@router.put("/{restaurant_id}/", response_model=RestaurantSchema, description="Update restaurant info (admin only)")
 def update_restaurant_info(
     restaurant_id: int,
     restaurant_update: RestaurantCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(check_role("admin"))
 ):
-    if not check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized to update restaurant info")
-    
     db_restaurant = db.query(RestaurantModel).filter(RestaurantModel.id == restaurant_id).first()
     if not db_restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
@@ -155,16 +223,13 @@ def update_restaurant_info(
     return db_restaurant
 
 
-@router.patch("/restaurants/{restaurant_id}/", response_model=RestaurantSchema, description="Patch restaurant info (admin only)")
+@router.patch("/{restaurant_id}/", response_model=RestaurantSchema, description="Patch restaurant info (admin only)")
 def patch_restaurant_info(
     restaurant_id: int,
-    restaurant_update: RestaurantCreate,
+    restaurant_update: RestaurantUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(check_role("admin"))
 ):
-    if not check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized to update restaurant info")
-    
     db_restaurant = db.query(RestaurantModel).filter(RestaurantModel.id == restaurant_id).first()
     if not db_restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
@@ -177,61 +242,63 @@ def patch_restaurant_info(
     return db_restaurant
 
 
-@router.delete("/restaurants/{restaurant_id}/", status_code=status.HTTP_204_NO_CONTENT, description="Delete restaurant (admin only)")
+@router.delete("/{restaurant_id}/", status_code=status.HTTP_204_NO_CONTENT, description="Delete restaurant (admin only)")
 def delete_restaurant(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(check_role("admin"))
 ):
-    if not check_role("admin", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized to delete restaurant")
-    
     db_restaurant = db.query(RestaurantModel).filter(RestaurantModel.id == restaurant_id).first()
     if not db_restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
     
     db.delete(db_restaurant)
     db.commit()
-    return "deleted successfully"
+    return None
 
 
-@router.get("/{restaurant_id}/categories", response_model=List[MenuCategory])
-def get_restaurant_categories(restaurant_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    categories = db.query(MenuCategory).filter(MenuCategory.restaurant_id == restaurant_id).all()
+@router.get("/{restaurant_id}/categories", response_model=list[MenuCategoryResponse])
+def get_categories_for_restaurant(
+    restaurant_id: int,
+    db: Session = Depends(get_db)
+):
+    categories = (
+        db.query(MenuCategory)
+        .filter(MenuCategory.restaurant_id == restaurant_id)
+        .all()
+    )
     return categories
 
 
-#create menu category for restaurant (admin or manager only)
-@router.post("/categories", response_model=MenuCategory, status_code=status.HTTP_201_CREATED)
-def create_menu_category_for_restaurant(
-    category: MenuCategoryCreate,
+@router.post(
+    "/{restaurant_id}/categories",
+    response_model=MenuCategoryResponse,
+    status_code=201
+)
+def create_category_for_restaurant(
+    restaurant_id: int,
+    payload: MenuCategoryCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    _ = Depends(check_any_role(["manager", "admin"]))
 ):
-    if not check_any_role(["admin", "manager"], current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized to create menu category")
-    
-    db_category = MenuCategoryModel(
-        name=category.name,
-        description=category.description,
-        restaurant_id=category.restaurant_id
-    )
-    db.add(db_category)
-    db.commit()
-    db.refresh(db_category)
-    return db_category
 
+    new_category = MenuCategory(
+        restaurant_id=restaurant_id,   # ← FIXED
+        **payload.dict()               # name + description only
+    )
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+    return new_category
 
 #get my restaurants for manager
 @router.get("/my-restaurants/", response_model=List[RestaurantSchema],
             description="Get restaurants for the logged-in manager")
 def get_my_restaurants(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    _ = Depends(check_role("manager"))
 ):
-    if not check_role("manager", current_user, db):
-        raise HTTPException(status_code=403, detail="Not authorized as manager")
-    
     profile = db.query(Profile).filter(Profile.firebase_uid == current_user["user_id"]).first()
     if not profile:
         raise HTTPException(status_code=404, detail="User profile not found")
