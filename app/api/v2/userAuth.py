@@ -75,7 +75,7 @@ def session_login(
         value=session_cookie,
         max_age=int(expires_in.total_seconds()),
         httponly=True,
-        secure=True,  # ⚠️ Set True in production (HTTPS)
+        secure=False,  # ⚠️ Set True in production (HTTPS)
         samesite="lax"
     )
 
