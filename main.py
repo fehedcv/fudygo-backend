@@ -17,12 +17,28 @@ from app.db.base import Base
 from app.db.session import engine
 from app.api.v2 import router
 from fastapi.security import HTTPBearer
+from fastapi.middleware.cors import CORSMiddleware
 
 app = router.app
 security = HTTPBearer()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+origins = [
+    "http://localhost:5173",      # Vite local dev default
+    "http://127.0.0.1:5173",      # Alternative local dev
+    "http://192.168.1.5:5173",    # IF you access your frontend via network IP (example)
+]
+
+# 2. Add the Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,        # List of allowed origins
+    allow_credentials=True,       # REQUIRED for cookies/auth
+    allow_methods=["*"],          # Allow all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],          # Allow all headers
+)
 
 @app.on_event("startup")
 def on_startup():
