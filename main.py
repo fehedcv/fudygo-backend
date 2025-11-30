@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 origins = [
+    "http://localhost:8081",
     "http://localhost:5173",      # Vite local dev default
     "http://127.0.0.1:5173",      # Alternative local dev
     "http://192.168.1.5:5173",    # IF you access your frontend via network IP (example)
