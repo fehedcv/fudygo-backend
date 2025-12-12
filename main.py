@@ -29,7 +29,7 @@ origins = [
     "http://localhost:8081",
     "http://localhost:5173",      # Vite local dev default
     "http://127.0.0.1:5173",      # Alternative local dev
-    "http://192.168.1.5:5173",    # IF you access your frontend via network IP (example)
+    "http://192.168.1.11:5173"   # IF you access your frontend via network IP (example)
 ]
 
 # 2. Add the Middleware

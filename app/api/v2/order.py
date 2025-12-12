@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.restaurant import Order, OrderStatusHistory
-from app.models.user import Profile
+from app.models.user import Profile, Address 
+from app.models.restaurant import Restaurant, MenuItem
 from app.schemas.order import (
     OrderCreate,
     OrderResponse,
@@ -19,42 +20,112 @@ router = APIRouter()
 # -------------------------------------------------------
 # POST /orders → Place new order
 # -------------------------------------------------------
+
 @router.post("/", response_model=OrderResponse)
 def place_order(
     order: OrderCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
-    # create unique order no
+    user = current_user["db_user"]
+
+    # -------------------------------
+    # 1. Validate restaurant
+    # -------------------------------
+    restaurant = db.get(Restaurant, order.restaurant_id)
+    if not restaurant:
+        raise HTTPException(404, "Restaurant not found")
+
+    # -------------------------------
+    # 2. Validate delivery address
+    # -------------------------------
+    if order.order_type == "delivery":
+        if not order.delivery_address_id:
+            raise HTTPException(400, "Delivery address required")
+
+        address = db.get(Address, order.delivery_address_id)
+        if not address or address.profile_id != user.id:
+            raise HTTPException(403, "Invalid delivery address")
+
+    # -------------------------------
+    # 3. Validate items & calculate subtotal
+    # -------------------------------
+    subtotal = 0
+    validated_items = []
+
+    for item_input in order.items:
+        menu_item = db.get(MenuItem, item_input.item_id)
+
+        if not menu_item:
+            raise HTTPException(404, f"Menu item {item_input.item_id} not found")
+
+        if menu_item.restaurant_id != order.restaurant_id:
+            raise HTTPException(400, "Item does not belong to this restaurant")
+
+        if item_input.quantity <= 0:
+            raise HTTPException(400, "Invalid item quantity")
+
+        item_total = menu_item.price * item_input.quantity
+        subtotal += item_total
+
+        validated_items.append({
+            "item_id": menu_item.id,
+            "name": menu_item.name,
+            "quantity": item_input.quantity,
+            "unit_price": menu_item.price,
+            "total_price": item_total
+        })
+
+    # -------------------------------
+    # 4. Compute fees
+    # -------------------------------
+    delivery_fee = restaurant.minimum_order_amount or 40 if order.order_type == "delivery" else 0
+    service_fee = 15
+    discount_amount = 0  # apply coupons here later
+    tax_amount = int(subtotal * 0.05)
+
+    total_amount = subtotal + delivery_fee + service_fee + tax_amount - discount_amount
+
+    # -------------------------------
+    # 5. Create order number
+    # -------------------------------
     order_number = f"ORD-{uuid.uuid4().hex[:10].upper()}"
 
+    # -------------------------------
+    # 6. Create Order
+    # -------------------------------
     new_order = Order(
         order_number=order_number,
-        user_id=current_user["db_user"].id,
+        user_id=user.id,
         restaurant_id=order.restaurant_id,
         delivery_address_id=order.delivery_address_id,
         order_type=order.order_type,
         status="pending",
-        items=order.items,
-        subtotal_amount=order.subtotal_amount,
-        discount_amount=order.discount_amount,
-        delivery_fee=order.delivery_fee,
-        tax_amount=order.tax_amount,
-        total_amount=order.total_amount,
+        scheduled_time=order.scheduled_time,
+
+        # Monetary values
+        items=validated_items,  # Stored as JSONB
+        subtotal_amount=subtotal,
+        discount_amount=discount_amount,
+        delivery_fee=delivery_fee,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+
         payment_method=order.payment_method,
         special_instructions=order.special_instructions,
-        scheduled_time=order.scheduled_time,
     )
 
     db.add(new_order)
     db.commit()
     db.refresh(new_order)
 
-    # Add status history
+    # -------------------------------
+    # 7. Add Status History
+    # -------------------------------
     history = OrderStatusHistory(
         order_id=new_order.id,
         status="pending",
-        updated_by=current_user["db_user"].full_name,
+        updated_by=user.full_name
     )
     db.add(history)
     db.commit()

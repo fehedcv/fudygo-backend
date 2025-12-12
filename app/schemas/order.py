@@ -27,6 +27,10 @@ class OrderStatusHistorySchema(BaseModel):
         "from_attributes": True
     }
 
+class OrderItemInput(BaseModel):
+    item_id: int
+    quantity: int
+
 
 # -----------------------------
 # Base Order Schema
@@ -35,15 +39,11 @@ class OrderBase(BaseModel):
     restaurant_id: int
     delivery_address_id: Optional[int] = None
     order_type: str
-    items: List[Any]
-    subtotal_amount: int
-    discount_amount: Optional[int] = 0
-    delivery_fee: Optional[int] = 0
-    tax_amount: Optional[int] = 0
-    total_amount: int
+    items: List[OrderItemInput]   # secure input format
     payment_method: str
     special_instructions: Optional[str] = None
     scheduled_time: Optional[datetime] = None
+
 
 
 # -----------------------------
