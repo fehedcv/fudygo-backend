@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, UniqueConstraint, Boolean
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, DOUBLE_PRECISION
+from geoalchemy2 import Geography
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.base import Base
@@ -25,17 +26,32 @@ class Restaurant(Base):
     logo_url = Column(String(255), nullable=True)
     banner_url = Column(String(255), nullable=True)
     address = Column(String(500), nullable=False)
-    latitude = Column(String(50), nullable=True, index=True)
-    longitude = Column(String(50), nullable=True, index=True)
+
+    # Keep lat/lng as floats
+    latitude = Column(DOUBLE_PRECISION, nullable=True, index=True)
+    longitude = Column(DOUBLE_PRECISION, nullable=True, index=True)
+
+    # NEW: PostGIS GEOGRAPHY POINT (lon, lat)
+    location = Column(
+        Geography(geometry_type='POINT', srid=4326),
+        nullable=True,
+        index=True
+    )
+
+    # NEW: Restaurant-specific delivery radius (km)
+    delivery_radius_km = Column(DOUBLE_PRECISION, default=5)
+
     phone_number = Column(String(20), nullable=True)
     email = Column(String(255), nullable=True)
     website_url = Column(String(255), nullable=True)
     operating_hours = Column(String(500), nullable=True)
+
     is_active = Column(Integer, default=1, index=True)
     minimum_order_amount = Column(Integer, default=0)
     average_delivery_time = Column(Integer, nullable=True)
     average_rating = Column(Integer, default=0)
     total_reviews = Column(Integer, default=0)
+
     owner_id = Column(Integer, ForeignKey('profiles.id'), nullable=False, index=True)
 
     created_at = Column(DateTime, default=utcnow)
@@ -49,6 +65,11 @@ class Restaurant(Base):
     orders = relationship("Order", order_by="Order.id", back_populates="restaurant")
     reviews = relationship("Review", order_by="Review.id", back_populates="restaurant")
 
+    # Automatically keep PostGIS location synced with lat/lng
+    def update_location(self):
+        """Call this whenever latitude/longitude changes."""
+        if self.latitude and self.longitude:
+            self.location = f"POINT({self.longitude} {self.latitude})"
 
 # ---------------------------------------------------------------------
 # Menu Category

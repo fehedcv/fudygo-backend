@@ -16,8 +16,7 @@ class MenuCategoryCreate(MenuCategoryBase):
 
 class MenuCategoryResponse(MenuCategoryBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
+
 
     class Config:
         orm_mode = True
@@ -29,6 +28,7 @@ class MenuItemBase(BaseModel):
     description: Optional[str] = None
     price: float
     is_available: bool = True
+    image_url: Optional[str] = None
 
 
 class MenuItemCreate(MenuItemBase):
@@ -45,8 +45,6 @@ class MenuItemUpdate(BaseModel):
 
 class MenuItemResponse(MenuItemBase):
     id: int
-    created_at: datetime
-    updated_at: datetime
 
     class Config:
         orm_mode = True

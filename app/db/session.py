@@ -22,7 +22,8 @@ if database == "":
     raise ValueError("Missing environment variable: database")
 
 
-DATABASE_URL = f"postgresql+pg8000://{user}:{password}@{host}:{port}/{database}"
+#DATABASE_URL = f"postgresql+pg8000://{user}:{password}@{host}:{port}/{database}"
+DATABASE_URL = os.getenv('DATABASE_URL') 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 

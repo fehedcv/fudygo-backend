@@ -5,4 +5,4 @@ __pycache__/
 /fudygo-firebase.json
 /test.html
 /.vscode
-/get_id_token.py
+/get_token.py

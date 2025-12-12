@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import func, asc, desc
+from sqlalchemy import func, asc, desc, text
 import uuid
 from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema , RestaurantUpdate
 from typing import List, Optional
@@ -89,13 +89,66 @@ def search_restaurants(
     return restaurants
 
 
+#get restaurants based on eligibility to user
+@router.get("/delivering-to")
+def restaurants_delivering_to(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    db: Session = Depends(get_db)
+):
+    point = {
+        "lat": lat,
+        "lng": lng
+    }
+
+    query = text("""
+        SELECT
+            id,
+            name,
+            slug,
+            address,
+            logo_url,
+            delivery_radius_km,
+            latitude,
+            longitude,
+            ST_Distance(
+                location,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)
+            ) AS distance
+        FROM restaurants
+        WHERE ST_DWithin(
+            location,
+            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326),
+            delivery_radius_km * 1000
+        )
+        ORDER BY distance ASC;
+    """)
+
+    rows = db.execute(query, point).fetchall()
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": r.id,
+            "name": r.name,
+            "slug": r.slug,
+            "address": r.address,
+            "logo_url": r.logo_url,
+            "distance_km": round(r.distance / 1000, 2),
+            "delivery_radius_km": r.delivery_radius_km,
+            "latitude": r.latitude,
+            "longitude": r.longitude
+        })
+
+    return results
+
+
 @router.get("/{restaurant_id}", response_model=RestaurantSchema)
 def get_restaurant(restaurant_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     restaurant = db.query(RestaurantModel).filter(RestaurantModel.id == restaurant_id).first()
     if not restaurant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
     return restaurant
-
 
 @router.post(
     "/",
@@ -109,7 +162,7 @@ def create_restaurant_for_user(
     _ = Depends(check_role("admin"))
 ):
     # -------------------------
-    # 2. Validate owner existence
+    # 1. Validate owner existence
     # -------------------------
     owner = db.query(ProfileModel).filter(ProfileModel.id == restaurant.owner_id).first()
     if not owner:
@@ -119,7 +172,7 @@ def create_restaurant_for_user(
         )
 
     # -------------------------
-    # 3. Generate unique slug
+    # 2. Generate unique slug
     # -------------------------
     try:
         slug = restaurant.name.lower().replace(" ", "-") + "-" + str(uuid.uuid4())[:8]
@@ -130,7 +183,7 @@ def create_restaurant_for_user(
         )
 
     # -------------------------
-    # 4. Create Restaurant Object
+    # 3. Create Restaurant Object
     # -------------------------
     db_restaurant = RestaurantModel(
         slug=slug,
@@ -148,7 +201,20 @@ def create_restaurant_for_user(
         minimum_order_amount=restaurant.minimum_order_amount,
         average_delivery_time=restaurant.average_delivery_time,
         owner_id=restaurant.owner_id,
+        delivery_radius_km=restaurant.delivery_radius_km,   # ✅ NEW
     )
+
+    # -------------------------
+    # 4. Sync PostGIS location (longitude then latitude)
+    # -------------------------
+    try:
+        if restaurant.latitude and restaurant.longitude:
+            db_restaurant.location = f"POINT({restaurant.longitude} {restaurant.latitude})"
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid coordinates: {str(e)}"
+        )
 
     # -------------------------
     # 5. Add manager role safely
@@ -203,6 +269,7 @@ def create_restaurant_for_user(
             status_code=500,
             detail=f"Unexpected server error: {str(e)}"
         )
+    
 
 @router.put("/{restaurant_id}/", response_model=RestaurantSchema, description="Update restaurant info (admin only)")
 def update_restaurant_info(
