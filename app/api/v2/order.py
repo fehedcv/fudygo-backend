@@ -13,6 +13,8 @@ from app.schemas.order import (
 from app.core.auth import get_current_user, check_role, check_any_role
 from datetime import datetime
 import uuid
+from app.realtime.manager import manager
+
 
 router = APIRouter()
 
@@ -20,50 +22,33 @@ router = APIRouter()
 # -------------------------------------------------------
 # POST /orders → Place new order
 # -------------------------------------------------------
-
 @router.post("/", response_model=OrderResponse)
-def place_order(
+async def place_order(
     order: OrderCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user = current_user["db_user"]
 
-    # -------------------------------
-    # 1. Validate restaurant
-    # -------------------------------
+    # 1️⃣ Validate restaurant
     restaurant = db.get(Restaurant, order.restaurant_id)
     if not restaurant:
         raise HTTPException(404, "Restaurant not found")
 
-    # -------------------------------
-    # 2. Validate delivery address
-    # -------------------------------
+    # 2️⃣ Validate delivery address
     if order.order_type == "delivery":
-        if not order.delivery_address_id:
-            raise HTTPException(400, "Delivery address required")
-
         address = db.get(Address, order.delivery_address_id)
         if not address or address.profile_id != user.id:
             raise HTTPException(403, "Invalid delivery address")
 
-    # -------------------------------
-    # 3. Validate items & calculate subtotal
-    # -------------------------------
+    # 3️⃣ Validate items
     subtotal = 0
     validated_items = []
 
     for item_input in order.items:
         menu_item = db.get(MenuItem, item_input.item_id)
-
-        if not menu_item:
-            raise HTTPException(404, f"Menu item {item_input.item_id} not found")
-
-        if menu_item.restaurant_id != order.restaurant_id:
-            raise HTTPException(400, "Item does not belong to this restaurant")
-
-        if item_input.quantity <= 0:
-            raise HTTPException(400, "Invalid item quantity")
+        if not menu_item or menu_item.restaurant_id != order.restaurant_id:
+            raise HTTPException(400, "Invalid menu item")
 
         item_total = menu_item.price * item_input.quantity
         subtotal += item_total
@@ -73,44 +58,29 @@ def place_order(
             "name": menu_item.name,
             "quantity": item_input.quantity,
             "unit_price": menu_item.price,
-            "total_price": item_total
+            "total_price": item_total,
         })
 
-    # -------------------------------
-    # 4. Compute fees
-    # -------------------------------
-    delivery_fee = restaurant.minimum_order_amount or 40 if order.order_type == "delivery" else 0
-    service_fee = 15
-    discount_amount = 0  # apply coupons here later
+    # 4️⃣ Fees
+    delivery_fee = 40 if order.order_type == "delivery" else 0
     tax_amount = int(subtotal * 0.05)
+    service_fee = 15
+    total_amount = subtotal + delivery_fee + tax_amount + service_fee
 
-    total_amount = subtotal + delivery_fee + service_fee + tax_amount - discount_amount
-
-    # -------------------------------
-    # 5. Create order number
-    # -------------------------------
-    order_number = f"ORD-{uuid.uuid4().hex[:10].upper()}"
-
-    # -------------------------------
-    # 6. Create Order
-    # -------------------------------
+    # 5️⃣ Create order
     new_order = Order(
-        order_number=order_number,
+        order_number=f"ORD-{uuid.uuid4().hex[:10].upper()}",
         user_id=user.id,
         restaurant_id=order.restaurant_id,
         delivery_address_id=order.delivery_address_id,
         order_type=order.order_type,
         status="pending",
         scheduled_time=order.scheduled_time,
-
-        # Monetary values
-        items=validated_items,  # Stored as JSONB
+        items=validated_items,
         subtotal_amount=subtotal,
-        discount_amount=discount_amount,
         delivery_fee=delivery_fee,
         tax_amount=tax_amount,
         total_amount=total_amount,
-
         payment_method=order.payment_method,
         special_instructions=order.special_instructions,
     )
@@ -119,16 +89,29 @@ def place_order(
     db.commit()
     db.refresh(new_order)
 
-    # -------------------------------
-    # 7. Add Status History
-    # -------------------------------
+    # 6️⃣ Status history
     history = OrderStatusHistory(
         order_id=new_order.id,
         status="pending",
-        updated_by=user.full_name
+        updated_by=user.full_name,
     )
     db.add(history)
     db.commit()
+
+    # 7️⃣ 🔥 REALTIME PUSH TO POS
+    await manager.send_to_restaurant(
+        restaurant_id=new_order.restaurant_id,
+        payload={
+            "type": "NEW_ORDER",
+            "order": {
+                "id": new_order.id,
+                "order_number": new_order.order_number,
+                "items": new_order.items,
+                "total_amount": new_order.total_amount,
+                "order_type": new_order.order_type,
+            },
+        },
+    )
 
     return new_order
 

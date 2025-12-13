@@ -1,0 +1,43 @@
+Name: python-socketio
+Version: 5.11.2
+Summary: Socket.IO server and client for Python
+Home-page: 
+Author: 
+Author-email: Miguel Grinberg <miguel.grinberg@gmail.com>
+License: 
+Location: /home/user/Desktop/projectsv2/fudygo-backend/venv/lib/python3.12/site-packages
+Requires: bidict, python-engineio
+Required-by: 
+---
+Name: python-engineio
+Version: 4.12.3
+Summary: Engine.IO server and client for Python
+Home-page: 
+Author: 
+Author-email: Miguel Grinberg <miguel.grinberg@gmail.com>
+License: MIT
+Location: /home/user/Desktop/projectsv2/fudygo-backend/venv/lib/python3.12/site-packages
+Requires: simple-websocket
+Required-by: python-socketio
+---
+Name: uvicorn
+Version: 0.38.0
+Summary: The lightning-fast ASGI server.
+Home-page: 
+Author: 
+Author-email: Tom Christie <tom@tomchristie.com>
+License: 
+Location: /home/user/Desktop/projectsv2/fudygo-backend/venv/lib/python3.12/site-packages
+Requires: click, h11
+Required-by: fastapi-cli, fastapi-cloud-cli
+---
+Name: fastapi
+Version: 0.120.0
+Summary: FastAPI framework, high performance, easy to learn, fast to code, ready for production
+Home-page: 
+Author: 
+Author-email: =?utf-8?q?Sebasti=C3=A1n_Ram=C3=ADrez?= <tiangolo@gmail.com>
+License: 
+Location: /home/user/Desktop/projectsv2/fudygo-backend/venv/lib/python3.12/site-packages
+Requires: annotated-doc, pydantic, starlette, typing-extensions
+Required-by: 
