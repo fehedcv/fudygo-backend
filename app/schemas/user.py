@@ -57,9 +57,9 @@ class AddressCreate(BaseModel):
     longitude: str | None = None
     place_id: str | None = None
     formatted_address: str | None = None
-    city: str
+    city: str 
     state: str
-    country: str
+    country: str | None = "India"
     postal_code: str
     is_default: int = 0
 

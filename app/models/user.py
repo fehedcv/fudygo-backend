@@ -69,7 +69,7 @@ class Address(Base):
     formatted_address = Column(String(255), nullable=True)
     city = Column(String(100), nullable=False)
     state = Column(String(100), nullable=False)
-    country = Column(String(100), nullable=False)
+    country = Column(String(100), nullable=False, default="India")
     postal_code = Column(String(20), nullable=False, index=True)
     is_default = Column(Integer, default=0)  # 1 for default address, 0 otherwise
     created_at = Column(DateTime, default=datetime.utcnow)
