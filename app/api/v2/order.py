@@ -251,8 +251,17 @@ def track_order(
 def get_restaurant_orders(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    _ = Depends(check_role("manager"))
+    current_user: dict = Depends(get_current_user),
+    _ = Depends(check_any_role(["admin", "manager"]))
 ):
+    
+    restaurant = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(404, "Restaurant not found")
+
+    if restaurant.owner_id != current_user["db_user"].id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You are not the owner of this restaurant")
+
     orders = (
         db.query(Order)
         .options(

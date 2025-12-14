@@ -1,27 +1,26 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from firebase_admin import auth
 from app.realtime.manager import manager
+from app.core.ws_auth import authenticate_restaurant_ws, WSAuthError
 
 router = APIRouter()
 
+
 @router.websocket("/ws/orders/{restaurant_id}")
 async def orders_ws(websocket: WebSocket, restaurant_id: int):
-    session_cookie = websocket.cookies.get("session")
-
-    if not session_cookie:
-        await websocket.close(code=4401)
-        return
-
     try:
-        auth.verify_session_cookie(session_cookie, check_revoked=True)
-    except Exception:
-        await websocket.close(code=4401)
+        auth_context = await authenticate_restaurant_ws(
+            websocket=websocket,
+            restaurant_id=restaurant_id,
+        )
+    except WSAuthError as e:
+        await websocket.close(code=4403)
         return
 
+    # ✅ Accept connection only AFTER auth
     await manager.connect(restaurant_id, websocket)
 
     try:
         while True:
-            await websocket.receive_text()
+            await websocket.receive_text()  # keepalive
     except WebSocketDisconnect:
         manager.disconnect(restaurant_id, websocket)
