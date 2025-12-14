@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.models.restaurant import Order, OrderStatusHistory
 from app.models.user import Profile, Address 
@@ -14,6 +14,7 @@ from app.core.auth import get_current_user, check_role, check_any_role
 from datetime import datetime
 import uuid
 from app.realtime.manager import manager
+from app.schemas.restaurant import RestaurantOrderResponse
 
 
 router = APIRouter()
@@ -243,18 +244,27 @@ def track_order(
 # -------------------------------------------------------
 # GET /orders/restaurant/{id} → Restaurant orders
 # -------------------------------------------------------
-@router.get("/restaurant/{restaurant_id}", response_model=list[OrderResponse])
+@router.get(
+    "/restaurant/{restaurant_id}",
+    response_model=list[RestaurantOrderResponse]
+)
 def get_restaurant_orders(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    _ = Depends(check_role("restaurant"))
+    _ = Depends(check_role("manager"))
 ):
-    orders = db.query(Order).filter(
-        Order.restaurant_id == restaurant_id
-    ).all()
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.user),
+            joinedload(Order.delivery_address)
+        )
+        .filter(Order.restaurant_id == restaurant_id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
 
     return orders
-
 
 # -------------------------------------------------------
 # GET /orders/delivery/{id} → Delivery partner orders

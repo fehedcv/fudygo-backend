@@ -12,6 +12,14 @@ class UserCreate(BaseModel):
     profile_picture_url: str | None = None
 
 
+class OrderUserResponse(BaseModel):
+    id: int
+    full_name: str
+    phone_number: Optional[str] = None
+
+    model_config = {
+        "from_attributes": True
+    }
 
 
 
@@ -99,3 +107,5 @@ class AddressUpdate(BaseModel):
     is_default: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+

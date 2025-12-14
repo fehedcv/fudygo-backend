@@ -1,7 +1,9 @@
 # pydantic schemas for restaurant creation and display
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
-
+from typing import Optional, List
+from app.schemas.user import OrderUserResponse, AddressModel
+from app.schemas.order import OrderItemResponse
 
 # ---------------------------------------------------------
 # CREATE RESTAURANT SCHEMA
@@ -115,3 +117,37 @@ class MenuCategory(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+
+class RestaurantOrderResponse(BaseModel):
+    id: int
+    order_number: str
+
+    status: str
+    order_type: str
+    scheduled_time: Optional[datetime]
+
+    user: OrderUserResponse
+    delivery_address: Optional[AddressModel]
+
+    items: List[OrderItemResponse]
+
+    subtotal_amount: int
+    discount_amount: int
+    delivery_fee: int
+    tax_amount: int
+    total_amount: int
+
+    payment_method: str
+    payment_status: str
+
+    special_instructions: Optional[str]
+    estimated_delivery_time: Optional[int]
+
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }

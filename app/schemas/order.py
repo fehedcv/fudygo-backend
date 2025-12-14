@@ -13,6 +13,16 @@ class OrderItem(BaseModel):
     price: int
     total: int
 
+from pydantic import BaseModel
+from typing import Optional
+
+class OrderItemResponse(BaseModel):
+    item_id: int
+    name: Optional[str] = None
+    quantity: int
+    unit_price: int
+    total_price: int
+
 
 # -----------------------------
 # Status History Schema
