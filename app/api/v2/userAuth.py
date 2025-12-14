@@ -7,7 +7,7 @@ from app.core.auth import get_current_user, create_session_cookie, logout_user
 from firebase_admin import auth
 import datetime
 from app.schemas.auth import SessionLoginRequest
-
+from app.core.auth import check_role
 router = APIRouter()
 
 
@@ -102,7 +102,5 @@ def get_profile(current_user=Depends(get_current_user)):
 
 @router.get("/verify-manager")
 def verify_manager(current_user=Depends(get_current_user)):
-    db_user = current_user["db_user"]
-    if db_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Access forbidden: Manager role required")
-    return {"message": "Access granted: Manager role verified"}
+    check_role(current_user, "manager")
+    return HTTPException(status_code=200, detail="User is a manager")
