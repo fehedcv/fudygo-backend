@@ -161,7 +161,7 @@ def update_order_status(
     id: int,
     data: OrderStatusUpdate,
     db: Session = Depends(get_db),
-    _ = Depends(check_any_role(["restaurant", "delivery", "admin"]))
+    _ = Depends(check_any_role(["manager", "delivery", "admin"]))
 ):
     order = db.query(Order).filter(Order.id == id).first()
 

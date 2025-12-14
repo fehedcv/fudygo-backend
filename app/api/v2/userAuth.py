@@ -98,3 +98,11 @@ def logout(response: Response, current_user=Depends(get_current_user)):
 def get_profile(current_user=Depends(get_current_user)):
     db_user = current_user["db_user"]
     return db_user
+
+
+@router.get("/verify-manager")
+def verify_manager(current_user=Depends(get_current_user)):
+    db_user = current_user["db_user"]
+    if db_user.role != "manager":
+        raise HTTPException(status_code=403, detail="Access forbidden: Manager role required")
+    return {"message": "Access granted: Manager role verified"}
