@@ -16,8 +16,8 @@ async def orders_ws(websocket: WebSocket, restaurant_id: int):
         await websocket.close(code=4403)
         return
 
-    # ✅ Accept connection only AFTER auth
-    await manager.connect(restaurant_id, websocket)
+    # ✅ Accept connection only AFTER auth and attach auth context
+    await manager.connect(restaurant_id, websocket, auth_context)
 
     try:
         while True:

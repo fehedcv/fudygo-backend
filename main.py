@@ -34,7 +34,8 @@ app.add_middleware(
         "https://localhost",
         "http://localhost"
     ],
-    allow_credentials=True,
+    # stateless token-based auth; do not allow cookies/credentials
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

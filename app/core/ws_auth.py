@@ -6,6 +6,7 @@ from app.db.session import Session as SessionLocal
 from app.models.user import Profile
 from app.models.restaurant import Restaurant
 
+
 class WSAuthError(Exception):
     pass
 
@@ -14,29 +15,32 @@ async def authenticate_restaurant_ws(
     websocket: WebSocket,
     restaurant_id: int,
 ):
-    """
-    Authenticate a WebSocket connection for restaurant POS access.
+    """Authenticate a WebSocket connection for restaurant POS access.
 
     Rules:
-    - Must have valid Firebase session cookie
+    - Must present `Authorization: Bearer <ID_TOKEN>` header (or `?token=` query fallback)
     - User must exist in Profile table
-    - User must have role: admin OR manager
+    - User must have role: admin OR manager (via custom claims or DB)
     - User must own the restaurant (Restaurant.owner_id)
     """
 
-    # 1️⃣ Extract session cookie
-    session_cookie = websocket.cookies.get("session")
-    if not session_cookie:
-        raise WSAuthError("Session cookie missing")
+    # 1️⃣ Extract Authorization header or token query param
+    auth_header = websocket.headers.get("authorization")
+    token = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1]
+    else:
+        # Fallback for clients that send token as query param
+        token = websocket.query_params.get("token")
 
-    # 2️⃣ Verify Firebase session
+    if not token:
+        raise WSAuthError("Missing Authorization Bearer token for websocket")
+
+    # 2️⃣ Verify Firebase ID token
     try:
-        decoded = auth.verify_session_cookie(
-            session_cookie,
-            check_revoked=True,
-        )
+        decoded = auth.verify_id_token(token, check_revoked=True)
     except Exception:
-        raise WSAuthError("Invalid or expired session")
+        raise WSAuthError("Invalid or revoked Firebase ID token")
 
     firebase_uid = decoded.get("uid")
     if not firebase_uid:
@@ -54,10 +58,8 @@ async def authenticate_restaurant_ws(
         if not user:
             raise WSAuthError("User not found")
 
-        # 4️⃣ Role check (admin OR manager)
-        if not user.roles or not any(
-            role in user.roles for role in ["admin", "manager"]
-        ):
+        # 4️⃣ Role check (admin OR manager) -- check DB roles
+        if not user.roles or not any(role in user.roles for role in ["admin", "manager"]):
             raise WSAuthError("Insufficient role")
 
         # 5️⃣ Restaurant ownership check
