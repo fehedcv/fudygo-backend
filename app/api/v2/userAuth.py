@@ -50,7 +50,7 @@ def session_login(
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
-    else:
+    '''else:
         # Optional: update existing info if changed in Firebase
         updated = False
         if db_user.full_name != name:
@@ -64,7 +64,7 @@ def session_login(
             updated = True
         if updated:
             db.commit()
-            db.refresh(db_user)
+            db.refresh(db_user)'''
 
     # 🔹 Create long-lived session cookie (2 weeks)
     session_cookie = create_session_cookie(id_token)

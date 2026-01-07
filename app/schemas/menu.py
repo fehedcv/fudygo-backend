@@ -31,8 +31,13 @@ class MenuItemBase(BaseModel):
     image_url: Optional[str] = None
 
 
-class MenuItemCreate(MenuItemBase):
-    pass
+class MenuItemCreate(BaseModel):
+    category_id: int
+    name: str
+    description: Optional[str] = None
+    price: float
+    is_available: bool = True
+    image_url: Optional[str] = None
 
 
 class MenuItemUpdate(BaseModel):

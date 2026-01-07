@@ -82,13 +82,7 @@ def add_menu_item(
     db: Session = Depends(get_db),
     _ = Depends(ManagerOrAdmin),  # auth applied here
 ):
-    if item.restaurant_id != restaurant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="restaurant_id mismatch between URL and body",
-        )
-
-    new_item = MenuItem(**item.dict())
+    new_item = MenuItem(**item.dict(), restaurant_id=restaurant_id)
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
