@@ -10,11 +10,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      id-token: write   # REQUIRED for OIDC
       contents: read
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Login to Azure
@@ -27,5 +27,5 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'fudygo'
-          slot-name: 'Production'
+          app-name: fudygo
+          slot-name: Production
