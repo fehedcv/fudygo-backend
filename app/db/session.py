@@ -1,35 +1,38 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
-user = os.getenv('username')
-password = os.getenv('password')
-host = os.getenv('host')
-port = os.getenv('port')
-database = os.getenv('database')
-if user == "":
-    raise ValueError("Missing environment variable: username")
-if password == "":
-    raise ValueError("Missing environment variable: password")
-if host == "":
-    host = "localhost"
-if port == "":
-    port = 5432
-if database == "":
-    raise ValueError("Missing environment variable: database")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set")
 
-#DATABASE_URL = f"postgresql+pg8000://{user}:{password}@{host}:{port}/{database}"
-DATABASE_URL = os.getenv('DATABASE_URL') 
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+# Ensure SSL is enforced (Azure requires this)
+if "sslmode=" not in DATABASE_URL:
+    if "?" in DATABASE_URL:
+        DATABASE_URL += "&sslmode=require"
+    else:
+        DATABASE_URL += "?sslmode=require"
 
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,     # 🔥 detect dead connections
+    pool_size=5,            # small pool for Azure App Service
+    max_overflow=10,
+    pool_recycle=1800,      # recycle every 30 minutes
+)
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+)
 
 def get_db():
-    db = Session()
+    db = SessionLocal()
     try:
         yield db
     finally:
