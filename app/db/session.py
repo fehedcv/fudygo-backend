@@ -25,14 +25,14 @@ engine = create_engine(
     pool_recycle=1800,      # recycle every 30 minutes
 )
 
-SessionLocal = sessionmaker(
+Session = sessionmaker(
     bind=engine,
     autoflush=False,
     autocommit=False,
 )
 
 def get_db():
-    db = SessionLocal()
+    db = Session()
     try:
         yield db
     finally:
