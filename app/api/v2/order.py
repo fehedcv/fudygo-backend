@@ -30,6 +30,9 @@ async def place_order(
     current_user: dict = Depends(get_current_user),
 ):
     user = current_user["db_user"]
+    #if user is not verified, raise error
+    if not user.is_verified:
+        raise HTTPException(403, "User not verified")
 
     # 1️⃣ Validate restaurant
     restaurant = db.get(Restaurant, order.restaurant_id)
@@ -104,13 +107,7 @@ async def place_order(
         restaurant_id=new_order.restaurant_id,
         payload={
             "type": "NEW_ORDER",
-            "order": {
-                "id": new_order.id,
-                "order_number": new_order.order_number,
-                "items": new_order.items,
-                "total_amount": new_order.total_amount,
-                "order_type": new_order.order_type,
-            },
+            "order_id": new_order.id,
         },
     )
 
@@ -269,6 +266,47 @@ def get_restaurant_orders(
             joinedload(Order.delivery_address)
         )
         .filter(Order.restaurant_id == restaurant_id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    return orders
+
+
+# -------------------------------------------------------
+# GET /orders/restaurant/{id}/today → Restaurant orders today
+# -------------------------------------------------------
+@router.get(
+    "/restaurant/{restaurant_id}/today",
+    response_model=list[RestaurantOrderResponse]
+)
+def get_restaurant_orders_today(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+    _ = Depends(check_any_role(["admin", "manager"]))
+):
+    restaurant = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(404, "Restaurant not found")
+
+    if restaurant.owner_id != current_user["db_user"].id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You are not the owner of this restaurant")
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.user),
+            joinedload(Order.delivery_address)
+        )
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= today_start,
+            Order.created_at <= today_end
+        )
         .order_by(Order.created_at.desc())
         .all()
     )

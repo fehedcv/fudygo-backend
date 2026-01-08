@@ -32,7 +32,9 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "https://localhost",
-        "http://localhost"
+        "http://localhost",
+        "https://fudygo.tech",
+        "https://pos.fudygo.tech",
     ],
     # stateless token-based auth; do not allow cookies/credentials
     allow_credentials=False,
