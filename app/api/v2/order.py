@@ -143,9 +143,10 @@ def get_order_details(
     if not order:
         raise HTTPException(404, "Order not found")
 
-    # User can only access their own order
+    # User can only access their own order, but if mannager/admin, they can access all
     if order.user_id != current_user["db_user"].id:
-        raise HTTPException(403, "Not your order")
+        if not check_any_role(["manager", "admin"]):
+            raise HTTPException(403, "Not your order")
 
     return order
 
