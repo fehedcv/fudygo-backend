@@ -24,6 +24,8 @@ class Profile(Base):
     is_verified = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    otp_last_sent_at = Column(DateTime, nullable=True)
+    otp_attempts = Column(Integer, default=0)
 
     # Relationships
     addresses = relationship(
