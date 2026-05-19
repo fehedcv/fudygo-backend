@@ -108,6 +108,7 @@ async def place_order(
         payload={
             "type": "NEW_ORDER",
             "order_id": new_order.id,
+            "order_type": new_order.order_type,
         },
     )
 
