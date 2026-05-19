@@ -28,6 +28,7 @@ class RestaurantCreate(BaseModel):
     average_delivery_time: int | None = None
     average_rating: int = 0
     total_reviews: int = 0
+    delivery_fee: int = 0
 
     # Delivery radius for restaurant-specific delivery
     delivery_radius_km: float = Field(default=5, description="Delivery radius in kilometers")
@@ -63,6 +64,7 @@ class Restaurant(BaseModel):
     average_delivery_time: int | None = None
     average_rating: int
     total_reviews: int
+    delivery_fee: int
 
     # Must be included in API response
     delivery_radius_km: float
@@ -98,6 +100,7 @@ class RestaurantUpdate(BaseModel):
     average_delivery_time: int | None = None
     average_rating: int | None = None
     total_reviews: int | None = None
+    delivery_fee: int | None = None
 
     # Added for update support
     delivery_radius_km: float | None = None

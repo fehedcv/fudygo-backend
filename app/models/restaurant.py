@@ -51,6 +51,7 @@ class Restaurant(Base):
     average_delivery_time = Column(Integer, nullable=True)
     average_rating = Column(Integer, default=0)
     total_reviews = Column(Integer, default=0)
+    delivery_fee = Column(Integer, default=0)
 
     owner_id = Column(Integer, ForeignKey('profiles.id'), nullable=False, index=True)
 
