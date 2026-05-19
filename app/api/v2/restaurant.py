@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import func, asc, desc, text
 import uuid
-from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema , RestaurantUpdate
+from app.schemas.restaurant import RestaurantCreate, Restaurant as RestaurantSchema, RestaurantUpdate, SearchResult as SearchResultSchema
 from typing import List, Optional
 from app.db.session import get_db
-from app.models.restaurant import Restaurant as RestaurantModel
+from app.models.restaurant import Restaurant as RestaurantModel, MenuItem as MenuItemModel
 from app.models.user import Profile as ProfileModel
 from app.core.auth import get_current_user, check_role, add_role, check_any_role
 from app.models.user import Profile
@@ -137,6 +137,86 @@ def restaurants_delivering_to(
             "latitude": r.latitude,
             "longitude": r.longitude
         })
+
+    return results
+
+
+@router.get("/search", response_model=List[SearchResultSchema])
+def search_food_and_restaurants(
+    query: str = Query(..., min_length=1, description="Search by food item or restaurant name"),
+    latitude: Optional[float] = Query(None),
+    longitude: Optional[float] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Search restaurants by name or food items, filtered to those delivering to the user's location."""
+
+    # Base filters applied to every restaurant query
+    base_filters = [RestaurantModel.is_active == 1]
+
+    # When coordinates are provided, restrict to restaurants whose delivery radius covers the user
+    # Uses the same PostGIS ST_DWithin logic as /delivering-to
+    if latitude is not None and longitude is not None:
+        deliverable_ids_query = text("""
+            SELECT id FROM restaurants
+            WHERE ST_DWithin(
+                location,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326),
+                delivery_radius_km * 1000
+            )
+        """)
+        rows = db.execute(deliverable_ids_query, {"lat": latitude, "lng": longitude}).fetchall()
+        deliverable_ids = [row[0] for row in rows]
+        base_filters.append(RestaurantModel.id.in_(deliverable_ids))
+
+    # Restaurants whose name matches
+    name_matched = (
+        db.query(RestaurantModel)
+        .filter(*base_filters, RestaurantModel.name.ilike(f"%{query}%"))
+        .all()
+    )
+
+    # Restaurants that have at least one menu item matching
+    food_restaurant_ids = (
+        db.query(MenuItemModel.restaurant_id)
+        .filter(MenuItemModel.name.ilike(f"%{query}%"), MenuItemModel.is_available == True)
+        .distinct()
+        .subquery()
+    )
+    food_matched = (
+        db.query(RestaurantModel)
+        .filter(*base_filters, RestaurantModel.id.in_(food_restaurant_ids))
+        .all()
+    )
+
+    results = []
+    seen_ids = set()
+
+    # Food matches first (higher relevance)
+    for restaurant in food_matched:
+        matching_items = (
+            db.query(MenuItemModel)
+            .filter(
+                MenuItemModel.restaurant_id == restaurant.id,
+                MenuItemModel.name.ilike(f"%{query}%"),
+                MenuItemModel.is_available == True,
+            )
+            .limit(6)
+            .all()
+        )
+        results.append({"restaurant": restaurant, "menu_items": matching_items, "match_type": "food"})
+        seen_ids.add(restaurant.id)
+
+    # Restaurant name matches (show up to 6 available items)
+    for restaurant in name_matched:
+        if restaurant.id not in seen_ids:
+            items = (
+                db.query(MenuItemModel)
+                .filter(MenuItemModel.restaurant_id == restaurant.id, MenuItemModel.is_available == True)
+                .limit(6)
+                .all()
+            )
+            results.append({"restaurant": restaurant, "menu_items": items, "match_type": "restaurant"})
+            seen_ids.add(restaurant.id)
 
     return results
 

@@ -154,3 +154,25 @@ class RestaurantOrderResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+
+# ---------------------------------------------------------
+# SEARCH RESULT SCHEMA
+# ---------------------------------------------------------
+class SearchMenuItem(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    price: float
+    image_url: Optional[str] = None
+    is_available: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SearchResult(BaseModel):
+    restaurant: Restaurant
+    menu_items: List[SearchMenuItem]
+    match_type: str  # "food" or "restaurant"
+
+    model_config = ConfigDict(from_attributes=True)
