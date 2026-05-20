@@ -23,31 +23,28 @@ def search_restaurants(
     longitude: Optional[float] = Query(None, description="User longitude for location search"),
     sort_by: Optional[str] = Query("name", enum=["name", "rating", "distance"]),
     sort_order: Optional[str] = Query("asc", enum=["asc", "desc"]),
+    pickup: Optional[bool] = Query(None, description="Filter for pickup-only restaurants"),
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    
-
-    """
-    🔎 Search restaurants by name, rating, and location.
-    Supports sorting by name, rating, or distance, with pagination.
-    """
-
     query = db.query(RestaurantModel)
 
-    # 🧭 Filter by name
     if name:
         query = query.filter(RestaurantModel.name.ilike(f"%{name}%"))
 
-    # ⭐ Filter by minimum rating
     if min_rating is not None:
         query = query.filter(RestaurantModel.average_rating >= min_rating)
 
-    # 📍 Optional: distance calculation if lat/lon provided
     distance_column = None
     if latitude is not None and longitude is not None:
-        # Haversine formula (distance in km)
+        # Only consider restaurants that have coordinates
+        query = query.filter(
+            RestaurantModel.latitude.isnot(None),
+            RestaurantModel.longitude.isnot(None),
+        )
+
+        # Haversine distance in km
         distance_column = (
             6371
             * func.acos(
@@ -57,34 +54,40 @@ def search_restaurants(
                     * func.cos(func.radians(RestaurantModel.latitude))
                     * func.cos(func.radians(RestaurantModel.longitude) - func.radians(longitude))
                     + func.sin(func.radians(latitude))
-                    * func.sin(func.radians(RestaurantModel.latitude))
+                    * func.sin(func.radians(RestaurantModel.latitude)),
                 )
             )
         ).label("distance_km")
 
         query = query.add_columns(distance_column)
 
-    # 🧮 Sorting
-    if sort_by == "name":
-        order_col = RestaurantModel.name
+        # ✅ THE MISSING PIECE: only return restaurants whose delivery radius covers the user
+        query = query.filter(distance_column <= RestaurantModel.delivery_radius_km)
+
+    # Sorting
+    if sort_by == "distance" and distance_column is not None:
+        order_col = distance_column
     elif sort_by == "rating":
         order_col = RestaurantModel.average_rating
-    elif sort_by == "distance" and distance_column is not None:
-        order_col = distance_column
     else:
         order_col = RestaurantModel.name
 
     query = query.order_by(desc(order_col) if sort_order == "desc" else asc(order_col))
 
-    # 📊 Pagination
-    total = query.count()
+    # Pagination — count before applying offset/limit
+    # Use subquery to avoid count() issues with add_columns
+    if distance_column is not None:
+        total = query.with_entities(RestaurantModel.id).count()
+    else:
+        total = query.count()
+
     restaurants = query.offset((page - 1) * size).limit(size).all()
 
-    # 💡 If you added distance_column, results are tuples: (Restaurant, distance)
+    # Unwrap tuples when distance column was added
     if distance_column is not None:
         restaurants = [r[0] for r in restaurants]
 
-    return restaurants
+    return restaurants 
 
 
 #get restaurants based on eligibility to user

@@ -15,6 +15,7 @@ from datetime import datetime
 import uuid
 from app.realtime.manager import manager
 from app.schemas.restaurant import RestaurantOrderResponse
+from sqlalchemy import or_
 
 
 router = APIRouter()
@@ -298,6 +299,7 @@ def get_restaurant_orders_today(
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    #also include orders with status pending
     orders = (
         db.query(Order)
         .options(
@@ -306,8 +308,10 @@ def get_restaurant_orders_today(
         )
         .filter(
             Order.restaurant_id == restaurant_id,
-            Order.created_at >= today_start,
-            Order.created_at <= today_end
+            or_(
+                Order.status == "pending",
+                Order.created_at.between(today_start, today_end)
+            )
         )
         .order_by(Order.created_at.desc())
         .all()
